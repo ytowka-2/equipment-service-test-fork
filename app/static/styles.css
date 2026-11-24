@@ -344,6 +344,18 @@ tbody tr:hover {
   color: #246044;
   background: #e9f4ed;
 }
+.badge-priority-low {
+  color: #5f6b7a;
+  background: #f0f2f5;
+}
+.badge-priority-normal {
+  color: #3c4a5e;
+  background: #eaf1fd;
+}
+.badge-priority-high {
+  color: #9e3029;
+  background: #fff0ee;
+}
 .date-cell {
   font-size: 12px;
   white-space: nowrap;

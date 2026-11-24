@@ -26,6 +26,19 @@
         <button type="submit" class="button button-primary full-width">Сохранить статус</button>
       </form>
       <p class="field-hint status-hint">Если проблема повторилась, закрытую заявку можно вернуть в работу.</p>
+      <hr>
+      <h2 id="priority-heading">Приоритет</h2>
+      <span class="badge badge-priority-{{ ticket.priority.value }}">{{ ticket.priority.label }}</span>
+      <form action="/tickets/{{ ticket.id }}/priority" method="post">
+        <div class="field">
+          <label for="priority">Изменить приоритет</label>
+          <select name="priority" id="priority"{% if priority_error %} aria-invalid="true" aria-describedby="priority-error"{% endif %}>
+            {% for priority in priorities %}<option value="{{ priority.value }}"{% if priority == ticket.priority %} selected{% endif %}>{{ priority.label }}</option>{% endfor %}
+          </select>
+          {% if priority_error %}<p class="field-error" id="priority-error" role="alert">{{ priority_error }}</p>{% endif %}
+        </div>
+        <button type="submit" class="button button-primary full-width">Сохранить приоритет</button>
+      </form>
     </aside>
   </div>
 {% endblock %}

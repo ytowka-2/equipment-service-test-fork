@@ -1,3 +1,4 @@
+import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -15,6 +16,7 @@ def test_complete_ticket_lifecycle(client: TestClient, ticket_data: dict[str, st
     ticket = response.json()
     assert ticket.items() >= ticket_data.items()
     assert ticket["status"] == "new"
+    assert ticket["priority"] == "normal"
     created_at = datetime.fromisoformat(ticket["created_at"])
     assert created_at.tzinfo is not None
     assert before <= created_at <= datetime.now(UTC)
@@ -44,6 +46,7 @@ def test_complete_ticket_lifecycle(client: TestClient, ticket_data: dict[str, st
         {"equipment": 123, "description": "Проблема"},
         {"equipment": "Прибор", "description": "Проблема", "status": "closed"},
         {"equipment": "Прибор", "description": "Проблема", "id": 42},
+        {"equipment": "Прибор", "description": "Проблема", "priority": "urgent"},
     ],
 )
 def test_invalid_ticket_is_not_saved(client: TestClient, payload: dict) -> None:
@@ -73,11 +76,91 @@ def test_invalid_status_does_not_change_ticket(
     assert client.get(url).json() == ticket
 
 
+def test_priority_can_be_set_at_creation_and_changed(
+    client: TestClient, ticket_data: dict[str, str]
+) -> None:
+    ticket = client.post("/api/tickets", json={**ticket_data, "priority": "high"}).json()
+    assert ticket["priority"] == "high"
+    url = f"/api/tickets/{ticket['id']}"
+    for new_priority in ("low", "high", "normal"):
+        response = client.patch(f"{url}/priority", json={"priority": new_priority})
+        assert response.status_code == 200
+        updated = response.json()
+        assert updated == {**ticket, "priority": new_priority}
+        assert client.get(url).json() == updated
+        ticket = updated
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [{}, {"priority": "urgent"}, {"priority": ""}, {"priority": 1}, {"priority": "high", "id": 7}],
+)
+def test_invalid_priority_does_not_change_ticket(
+    client: TestClient, ticket_data: dict[str, str], payload: dict
+) -> None:
+    ticket = client.post("/api/tickets", json=ticket_data).json()
+    url = f"/api/tickets/{ticket['id']}"
+    assert client.patch(f"{url}/priority", json=payload).status_code == 422
+    assert client.get(url).json() == ticket
+
+
+def test_list_is_sorted_by_priority_then_date(
+    client: TestClient, ticket_data: dict[str, str]
+) -> None:
+    def create(priority: str) -> dict:
+        return client.post("/api/tickets", json={**ticket_data, "priority": priority}).json()
+
+    low = create("low")
+    older_high = create("high")
+    normal = create("normal")
+    newer_high = create("high")
+
+    assert client.get("/api/tickets").json() == [
+        newer_high,
+        older_high,
+        normal,
+        low,
+    ]
+
+
+def test_existing_database_gets_normal_priority(tmp_path: Path) -> None:
+    path = tmp_path / "old.sqlite3"
+    connection = sqlite3.connect(path)
+    connection.execute("""
+        CREATE TABLE tickets (
+            id INTEGER PRIMARY KEY,
+            equipment TEXT NOT NULL,
+            description TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'new',
+            created_at TEXT NOT NULL
+        )
+    """)
+    connection.execute(
+        """
+        INSERT INTO tickets (equipment, description, status, created_at)
+        VALUES ('Старый прибор', 'Старая проблема', 'closed', '2025-01-01T00:00:00+00:00')
+        """
+    )
+    connection.commit()
+    connection.close()
+
+    with TestClient(create_app(path), base_url="http://127.0.0.1") as client:
+        tickets = client.get("/api/tickets").json()
+        assert len(tickets) == 1
+        assert tickets[0]["priority"] == "normal"
+        updated = client.patch(
+            f"/api/tickets/{tickets[0]['id']}/priority", json={"priority": "high"}
+        ).json()
+        assert updated["priority"] == "high"
+
+
 def test_missing_ticket(client: TestClient) -> None:
     assert client.get("/api/tickets/999").status_code == 404
     response = client.patch("/api/tickets/999/status", json={"status": "closed"})
     assert response.status_code == 404
     assert response.json() == {"detail": "Заявка не найдена"}
+    response = client.patch("/api/tickets/999/priority", json={"priority": "high"})
+    assert response.status_code == 404
 
 
 def test_database_survives_app_restart(tmp_path: Path, ticket_data: dict[str, str]) -> None:

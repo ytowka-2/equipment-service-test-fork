@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Response, status
 
-from app.models import Ticket, TicketCreate, TicketId, TicketStatusUpdate
+from app.models import Ticket, TicketCreate, TicketId, TicketPriorityUpdate, TicketStatusUpdate
 from app.repository import TicketRepository
 
 
@@ -32,5 +32,13 @@ def create_api_router(repository: TicketRepository) -> APIRouter:
     )
     def update_status(ticket_id: TicketId, data: TicketStatusUpdate) -> Ticket:
         return repository.update_status(ticket_id, data.status)
+
+    @router.patch(
+        "/{ticket_id}/priority",
+        summary="Изменить приоритет",
+        responses={404: {"description": "Не найдена"}},
+    )
+    def update_priority(ticket_id: TicketId, data: TicketPriorityUpdate) -> Ticket:
+        return repository.update_priority(ticket_id, data.priority)
 
     return router

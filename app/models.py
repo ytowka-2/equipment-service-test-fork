@@ -26,17 +26,38 @@ class TicketStatus(StrEnum):
         }[self]
 
 
+class TicketPriority(StrEnum):
+    LOW = "low"
+    NORMAL = "normal"
+    HIGH = "high"
+
+    @property
+    def label(self) -> str:
+        return {
+            self.LOW: "Низкий",
+            self.NORMAL: "Обычный",
+            self.HIGH: "Высокий",
+        }[self]
+
+
 class TicketCreate(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     equipment: str = Field(min_length=1, max_length=EQUIPMENT_MAX_LENGTH)
     description: str = Field(min_length=1, max_length=DESCRIPTION_MAX_LENGTH)
+    priority: TicketPriority = TicketPriority.NORMAL
 
 
 class TicketStatusUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     status: TicketStatus
+
+
+class TicketPriorityUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    priority: TicketPriority
 
 
 class Ticket(TicketCreate):

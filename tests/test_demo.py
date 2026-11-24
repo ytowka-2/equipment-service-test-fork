@@ -11,8 +11,16 @@ def test_demo_is_idempotent_and_sorted(tmp_path: Path) -> None:
         tickets = first.get("/api/tickets").json()
         assert len(tickets) == 5
         assert {ticket["status"] for ticket in tickets} == {"new", "in_progress", "closed"}
-        dates = [ticket["created_at"] for ticket in tickets]
-        assert dates == sorted(dates, reverse=True)
+        assert [ticket["priority"] for ticket in tickets] == [
+            "high",
+            "high",
+            "normal",
+            "normal",
+            "low",
+        ]
+        for priority in ("high", "normal", "low"):
+            dates = [ticket["created_at"] for ticket in tickets if ticket["priority"] == priority]
+            assert dates == sorted(dates, reverse=True)
         ticket_id = tickets[0]["id"]
         first.patch(f"/api/tickets/{ticket_id}/status", json={"status": "closed"})
         saved = first.get("/api/tickets").json()

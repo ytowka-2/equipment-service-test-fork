@@ -22,6 +22,15 @@
           {% if errors.get('description') %}<p id="description-error" class="field-error">{{ errors.description }}</p>{% endif %}
           <p class="field-hint">До {{ description_max_length }} символов. Поля со звёздочкой обязательны.</p>
         </div>
+        <div class="field">
+          <label for="priority">Приоритет</label>
+          <p class="field-hint" id="priority-hint">Насколько срочно нужен ремонт. Для большинства заявок подходит «Обычный».</p>
+          {% set selected_priority = values.get('priority', 'normal') %}
+          <select id="priority" name="priority" aria-describedby="priority-hint{% if errors.get('priority') %} priority-error{% endif %}"{% if errors.get('priority') %} aria-invalid="true"{% endif %}>
+            {% for priority in priorities %}<option value="{{ priority.value }}"{% if priority.value == selected_priority %} selected{% endif %}>{{ priority.label }}</option>{% endfor %}
+          </select>
+          {% if errors.get('priority') %}<p id="priority-error" class="field-error">{{ errors.priority }}</p>{% endif %}
+        </div>
         <div class="form-actions"><button class="button button-primary" type="submit">Создать заявку</button><a class="button button-secondary" href="/">Отмена</a></div>
       </form>
     </section>

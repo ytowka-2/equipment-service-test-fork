@@ -24,13 +24,13 @@
   <section class="panel" aria-labelledby="list-heading">
     <div class="panel-heading">
       <h2 id="list-heading">Все заявки <span class="count">{{ tickets | length }}</span></h2>
-      <span class="muted small">Сначала новые по дате</span>
+      <span class="muted small">Сначала высокий приоритет, затем новые по дате</span>
     </div>
     {% if tickets %}
       <div class="table-scroll">
         <table>
-          <caption class="sr-only">Заявки на обслуживание, от новых к старым</caption>
-          <thead><tr><th scope="col">Номер</th><th scope="col">Оборудование и проблема</th><th scope="col">Статус</th><th scope="col">Создана, UTC</th><th scope="col"><span class="sr-only">Действие</span></th></tr></thead>
+          <caption class="sr-only">Заявки на обслуживание: от высокого приоритета к низкому, внутри — от новых к старым</caption>
+          <thead><tr><th scope="col">Номер</th><th scope="col">Оборудование и проблема</th><th scope="col">Приоритет</th><th scope="col">Статус</th><th scope="col">Создана, UTC</th><th scope="col"><span class="sr-only">Действие</span></th></tr></thead>
           <tbody>
             {% for ticket in tickets %}
               <tr>
@@ -39,6 +39,7 @@
                   <a class="equipment-link" href="/tickets/{{ ticket.id }}">{{ ticket.equipment }}</a>
                   <p class="description-preview">{{ ticket.description | truncate(100) }}</p>
                 </td>
+                <td><span class="badge badge-priority-{{ ticket.priority.value }}">{{ ticket.priority.label }}</span></td>
                 <td><span class="badge badge-{{ ticket.status.value }}">{{ ticket.status.label }}</span></td>
                 <td class="date-cell"><time datetime="{{ ticket.created_at.isoformat() }}">{{ ticket.created_at.strftime('%d.%m.%Y') }}<span>{{ ticket.created_at.strftime('%H:%M') }}</span></time></td>
                 <td><a class="open-link" href="/tickets/{{ ticket.id }}" aria-label="Открыть заявку {{ ticket.id }}">↗</a></td>

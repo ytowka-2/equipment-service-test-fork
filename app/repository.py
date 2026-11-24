@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from app.models import Ticket, TicketCreate, TicketStatus
+from app.models import Ticket, TicketCreate, TicketPriority, TicketStatus
 
 
 class TicketNotFoundError(LookupError):
@@ -40,15 +40,34 @@ class TicketRepository:
                         CHECK (length(trim(description)) BETWEEN 1 AND 2000),
                     status TEXT NOT NULL DEFAULT 'new'
                         CHECK (status IN ('new', 'in_progress', 'closed')),
+                    priority TEXT NOT NULL DEFAULT 'normal'
+                        CHECK (priority IN ('low', 'normal', 'high')),
                     created_at TEXT NOT NULL
                 )
             """)
+            # Старая база создана без приоритета: добавляем колонку, не теряя заявки.
+            columns = {
+                row["name"] for row in connection.execute("PRAGMA table_info(tickets)").fetchall()
+            }
+            if "priority" not in columns:
+                connection.execute("""
+                    ALTER TABLE tickets ADD COLUMN priority TEXT NOT NULL DEFAULT 'normal'
+                        CHECK (priority IN ('low', 'normal', 'high'))
+                """)
 
     def list_all(self) -> list[Ticket]:
         with self._connect() as connection:
-            rows = connection.execute(
-                "SELECT * FROM tickets ORDER BY created_at DESC, id DESC"
-            ).fetchall()
+            rows = connection.execute("""
+                SELECT * FROM tickets
+                ORDER BY
+                    CASE priority
+                        WHEN 'high' THEN 0
+                        WHEN 'normal' THEN 1
+                        ELSE 2
+                    END,
+                    created_at DESC,
+                    id DESC
+            """).fetchall()
         return [Ticket.model_validate(dict(row)) for row in rows]
 
     def get(self, ticket_id: int) -> Ticket:
@@ -62,13 +81,14 @@ class TicketRepository:
         with self._connect() as connection:
             cursor = connection.execute(
                 """
-                INSERT INTO tickets (equipment, description, status, created_at)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO tickets (equipment, description, status, priority, created_at)
+                VALUES (?, ?, ?, ?, ?)
                 """,
                 (
                     data.equipment,
                     data.description,
                     TicketStatus.NEW.value,
+                    data.priority.value,
                     datetime.now(UTC).isoformat(),
                 ),
             )
@@ -86,6 +106,16 @@ class TicketRepository:
                 raise TicketNotFoundError(ticket_id)
         return self.get(ticket_id)
 
+    def update_priority(self, ticket_id: int, priority: TicketPriority) -> Ticket:
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "UPDATE tickets SET priority = ? WHERE id = ?",
+                (priority.value, ticket_id),
+            )
+            if cursor.rowcount == 0:
+                raise TicketNotFoundError(ticket_id)
+        return self.get(ticket_id)
+
     def seed_demo(self) -> None:
         """Добавляет примеры только в пустую базу, не меняя существующие заявки."""
         now = datetime.now(UTC)
@@ -95,6 +125,7 @@ class TicketRepository:
                 "После включения не отображается сигнал на втором канале. "
                 "Кабель проверен на другом приборе — работает.",
                 TicketStatus.NEW,
+                TicketPriority.HIGH,
                 now - timedelta(hours=2),
             ),
             (
@@ -102,6 +133,7 @@ class TicketRepository:
                 "Печать останавливается через 10–15 минут. "
                 "На экране сообщение об ошибке нагрева стола.",
                 TicketStatus.IN_PROGRESS,
+                TicketPriority.NORMAL,
                 now - timedelta(days=1),
             ),
             (
@@ -109,6 +141,7 @@ class TicketRepository:
                 "При запуске испытания слышен посторонний шум. "
                 "До осмотра оборудование выведено из эксплуатации.",
                 TicketStatus.NEW,
+                TicketPriority.HIGH,
                 now - timedelta(days=4),
             ),
             (
@@ -116,6 +149,7 @@ class TicketRepository:
                 "Не работает регулировка напряжения. "
                 "Требуется проверить энкодер на передней панели.",
                 TicketStatus.IN_PROGRESS,
+                TicketPriority.NORMAL,
                 now - timedelta(days=6),
             ),
             (
@@ -123,6 +157,7 @@ class TicketRepository:
                 "Показания нестабильны после переноса прибора. "
                 "Выполнены установка по уровню и калибровка — проблема устранена.",
                 TicketStatus.CLOSED,
+                TicketPriority.LOW,
                 now - timedelta(days=8),
             ),
         ]
@@ -133,11 +168,17 @@ class TicketRepository:
                 return
             connection.executemany(
                 """
-                INSERT INTO tickets (equipment, description, status, created_at)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO tickets (equipment, description, status, priority, created_at)
+                VALUES (?, ?, ?, ?, ?)
                 """,
                 [
-                    (equipment, description, status.value, created_at.isoformat())
-                    for equipment, description, status, created_at in examples
+                    (
+                        equipment,
+                        description,
+                        status.value,
+                        priority.value,
+                        created_at.isoformat(),
+                    )
+                    for equipment, description, status, priority, created_at in examples
                 ],
             )

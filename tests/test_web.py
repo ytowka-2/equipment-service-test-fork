@@ -20,6 +20,7 @@ def test_browser_lifecycle(client: TestClient, ticket_data: dict[str, str]) -> N
     assert "Заявка создана." in detail.text
     assert ticket_data["equipment"] in detail.text
     assert ticket_data["description"] in detail.text
+    assert "Обычный" in detail.text
     assert ticket_data["equipment"] in client.get("/").text
 
     ticket = client.get("/api/tickets").json()[0]
@@ -32,6 +33,50 @@ def test_browser_lifecycle(client: TestClient, ticket_data: dict[str, str]) -> N
     # Обновление страницы после POST не должно создавать ещё одну заявку.
     client.get(url)
     assert len(client.get("/api/tickets").json()) == 1
+
+
+def test_priority_is_set_on_creation_and_changed_in_detail(
+    client: TestClient, ticket_data: dict[str, str]
+) -> None:
+    response = client.post(
+        "/tickets", data={**ticket_data, "priority": "high"}, follow_redirects=False
+    )
+    assert response.status_code == 303
+    url = response.headers["location"]
+    detail = client.get(url)
+    assert "Высокий" in detail.text
+    ticket = client.get("/api/tickets").json()[0]
+    assert ticket["priority"] == "high"
+
+    response = client.post(
+        f"/tickets/{ticket['id']}/priority", data={"priority": "low"}, follow_redirects=False
+    )
+    assert response.status_code == 303
+    detail = client.get(response.headers["location"])
+    assert "Приоритет сохранён." in detail.text
+    assert "Низкий" in detail.text
+    assert client.get(f"/api/tickets/{ticket['id']}").json()["priority"] == "low"
+
+
+@pytest.mark.parametrize("priority", ["unknown", ""])
+def test_invalid_priority_is_explained(
+    client: TestClient, ticket_data: dict[str, str], priority: str
+) -> None:
+    ticket = client.post("/api/tickets", json=ticket_data).json()
+    response = client.post(f"/tickets/{ticket['id']}/priority", data={"priority": priority})
+    assert response.status_code == 422
+    assert "Выберите приоритет из списка." in response.text
+    assert client.get(f"/api/tickets/{ticket['id']}").json() == ticket
+
+
+def test_invalid_priority_on_creation_is_explained(
+    client: TestClient, ticket_data: dict[str, str]
+) -> None:
+    response = client.post("/tickets", data={**ticket_data, "priority": "unknown"})
+    assert response.status_code == 422
+    assert "Выберите приоритет из списка." in response.text
+    assert ticket_data["equipment"] in response.text
+    assert client.get("/api/tickets").json() == []
 
 
 @pytest.mark.parametrize(
